@@ -1,1 +1,209 @@
-Hello world
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tegaki</title>
+    <link rel="stylesheet" href="./tegaki.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .demo-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            background-color: #f5f5f5;
+        }
+        #fileInfo {
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tegaki</h1>
+    
+    <div class="demo-section">
+        <h2>Basic Drawing</h2>
+        <button id="openPainter">Open Painter</button>
+        <p>Draw something and click "Finish" to see the result.</p>
+    </div>
+    
+    <div class="demo-section">
+        <h2>Drawing with Replay</h2>
+        <button id="openPainterWithReplay">Open Painter (with replay)</button>
+        <p>Draw something, then you can view the replay after saving.</p>
+    </div>
+    
+    <div class="demo-section">
+        <h2>View Replay</h2>
+        <div class="upload-area" id="uploadArea">
+            <p>Drag & drop a replay file here or click to select</p>
+            <input type="file" id="fileInput" accept=".tgkr" style="display: none;">
+            <div id="fileInfo">No file selected</div>
+        </div>
+        <button id="viewReplay">View Replay</button>
+        <p>OR</p>
+        <input type="text" id="replayUrl" placeholder="Enter replay URL" style="width: 300px;">
+        <button id="viewReplayUrl">View Replay from URL</button>
+    </div>
+
+    <script src="./tegaki.min.js"></script>
+    <script>
+
+        // Basic drawing example
+        document.getElementById('openPainter').addEventListener('click', function() {
+            Tegaki.open({
+                width: 500,
+                height: 500,
+                onDone: function() {
+                    var w = window.open('', '_blank');
+                    Tegaki.flatten().toBlob(
+                        function(b) { 
+                            const url = URL.createObjectURL(b);
+                            w.location = url;
+                            w.document.title = 'Your Drawing';
+                            w.document.write(`<img src="${url}" style="max-width:100%">`);
+                        },
+                        'image/png'
+                    );
+                },
+                onCancel: function() {
+                    alert('Drawing canceled!');
+                }
+            });
+        });
+        
+        // Drawing with replay example
+        document.getElementById('openPainterWithReplay').addEventListener('click', function() {
+            Tegaki.open({
+                width: 500,
+                height: 500,
+                saveReplay: true,
+                onDone: function() {
+                    var w = window.open('');
+                    w.document.title = 'Your Drawing';
+
+                    // Get the image blob
+                    Tegaki.flatten().toBlob(function(imageBlob) {
+                        // Get the replay blob (using the syntax you found)
+                        const replayBlob = Tegaki.replayRecorder.toBlob();
+                        
+                        // Create URLs for both
+                        const imageUrl = URL.createObjectURL(imageBlob);
+                        const replayUrl = URL.createObjectURL(replayBlob);
+                        
+                        // <p><a href="${imageUrl}" download="drawing.png">Download Image</a></p>
+                        w.document.write(`
+                            <script src="./tegaki.min.js"><\/script>
+                            <link rel="stylesheet" href="./tegaki.css">
+                            <h3>Your Result:</h3>
+                            <img src="${imageUrl}"></img>
+                            <p><a href="${replayUrl}" download="drawing_replay.tgkr">Download Replay</a></p>
+                            <p><button onclick="Tegaki.open({replayMode: true, replayURL: '${replayUrl}'})">View Replay</button></p>
+                            <p>Replay URL: <input type="text" value="${replayUrl}" readonly style="width:100%"></p>
+                        `);
+                    }, 'image/png');
+                },
+                onCancel: function() {
+                    alert('Drawing canceled!');
+                }
+            });
+        });
+
+        // Replay file handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        let selectedFile = null;
+        
+        // Click handler for upload area
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#e9e9e9';
+        });
+        
+        uploadArea.addEventListener('dragleave', function() {
+            uploadArea.style.backgroundColor = '';
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '';
+            
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        // File input change handler
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+        
+        function handleFile(file) {
+            // Check file extension
+            if (!file.name.endsWith('.tgkr')) {
+                fileInfo.textContent = 'Please select a .tgkr replay file';
+                return;
+            }
+            
+            selectedFile = file;
+            fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        }
+        
+        // View replay from uploaded file
+        document.getElementById('viewReplay').addEventListener('click', function() {
+            if (!selectedFile) {
+                alert('Please select a replay file first');
+                return;
+            }
+            
+            const fileUrl = URL.createObjectURL(selectedFile);
+            Tegaki.open({
+                replayMode: true,
+                replayURL: fileUrl
+            });
+        });
+        
+        // View replay from URL
+        document.getElementById('viewReplayUrl').addEventListener('click', function() {
+            const url = document.getElementById('replayUrl').value;
+            if (!url) {
+                alert('Please enter a replay URL');
+                return;
+            }
+            
+            Tegaki.open({
+                replayMode: true,
+                replayURL: url
+            });
+        });
+
+    </script>
+</body>
+</html>
