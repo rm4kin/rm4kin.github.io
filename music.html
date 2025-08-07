@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Folder MP3 Player</title>
+    <style>
+        :root {
+            --primary-bg: #1e1e1e;
+            --secondary-bg: #2c2c2c;
+            --text-color: #e0e0e0;
+            --accent-color: #1DB954;
+            --hover-color: #444;
+            --active-color: #555;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #player-container {
+            width: 100%;
+            max-width: 400px;
+            background-color: var(--secondary-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #folder-select-prompt {
+            padding: 40px;
+            text-align: center;
+        }
+
+        #folder-select-button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #folder-select-button:hover {
+            background-color: #1ed760;
+        }
+        #folder-select-button:active {
+            transform: scale(0.98);
+        }
+
+        #main-player {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        #now-playing {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background-color: #444;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        #progress-bar {
+            width: 0;
+            height: 100%;
+            background-color: var(--accent-color);
+            border-radius: 3px;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .control-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 24px;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.1s;
+        }
+        .control-btn:hover {
+            color: var(--accent-color);
+        }
+        .control-btn:active {
+            transform: scale(0.9);
+        }
+        #play-pause-btn {
+            font-size: 40px;
+        }
+        
+        #shuffle-btn.active {
+            color: var(--accent-color);
+        }
+
+        #playlist-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: var(--primary-bg);
+        }
+        
+        #playlist {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #playlist li {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 1px solid #2a2a2a;
+            font-size: 14px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #playlist li:hover {
+            background-color: var(--hover-color);
+        }
+
+        #playlist li.active {
+            background-color: var(--accent-color);
+            color: white;
+            font-weight: bold;
+        }
+
+        /* Hide elements until ready */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="player-container">
+        <!-- Initial view to select a folder -->
+        <div id="folder-select-prompt">
+            <h1>Web MP3 Player</h1>
+            <p>Select a folder with your music to begin.</p>
+            <button id="folder-select-button">Select Music Folder</button>
+            <input type="file" id="folder-input" webkitdirectory multiple class="hidden">
+            <p style="font-size: 12px; color: #aaa; margin-top: 20px;">
+                Note: This works best in Chrome, Firefox, and Edge. Your files are not uploaded and are played directly from your computer.
+            </p>
+        </div>
+
+        <!-- The main player UI -->
+        <div id="main-player" class="hidden">
+            <div id="now-playing">No track selected</div>
+            
+            <div class="progress-container" id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+
+            <div id="controls">
+                <button id="prev-btn" class="control-btn">⏮</button>
+                <button id="play-pause-btn" class="control-btn">▶</button>
+                <button id="next-btn" class="control-btn">⏭</button>
+                <button id="shuffle-btn" class="control-btn">🔀</button>
+            </div>
+        </div>
+        
+        <!-- The playlist -->
+        <div id="playlist-container" class="hidden">
+            <ul id="playlist"></ul>
+        </div>
+        
+    </div>
+
+    <audio id="audio-player"></audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const folderSelectPrompt = document.getElementById('folder-select-prompt');
+            const folderSelectButton = document.getElementById('folder-select-button');
+            const folderInput = document.getElementById('folder-input');
+            
+            const mainPlayer = document.getElementById('main-player');
+            const playlistContainer = document.getElementById('playlist-container');
+            const audioPlayer = document.getElementById('audio-player');
+            const nowPlaying = document.getElementById('now-playing');
+            
+            const playPauseBtn = document.getElementById('play-pause-btn');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            
+            const progressBar = document.getElementById('progress-bar');
+            const progressContainer = document.getElementById('progress-container');
+            const playlistElement = document.getElementById('playlist');
+
+            // Player State
+            let trackList = [];
+            let originalTrackList = []; // For un-shuffling
+            let currentIndex = -1;
+            let isPlaying = false;
+            let isShuffle = false;
+            
+            // --- Event Listeners ---
+
+            // Trigger hidden file input when the select button is clicked
+            folderSelectButton.addEventListener('click', () => folderInput.click());
+            
+            // Handle folder selection
+            folderInput.addEventListener('change', handleFolderSelection);
+            
+            // Audio player controls
+            playPauseBtn.addEventListener('click', togglePlayPause);
+            nextBtn.addEventListener('click', playNextTrack);
+            prevBtn.addEventListener('click', playPrevTrack);
+            shuffleBtn.addEventListener('click', toggleShuffle);
+
+            // Audio element events
+            audioPlayer.addEventListener('ended', playNextTrack);
+            audioPlayer.addEventListener('timeupdate', updateProgressBar);
+            audioPlayer.addEventListener('loadedmetadata', updateProgressBar);
+            
+            // Playlist item click
+            playlistElement.addEventListener('click', (e) => {
+                if (e.target && e.target.matches('li')) {
+                    const trackIndex = parseInt(e.target.dataset.index, 10);
+                    if (trackIndex !== currentIndex) {
+                        playTrack(trackIndex);
+                    }
+                }
+            });
+
+            // Progress bar click
+            progressContainer.addEventListener('click', setProgress);
+
+            // --- Functions ---
+
+            function handleFolderSelection(event) {
+                const files = Array.from(event.target.files);
+                trackList = files.filter(file => file.name.toLowerCase().endsWith('.mp3'));
+                
+                if (trackList.length === 0) {
+                    alert('No MP3 files found in the selected folder.');
+                    return;
+                }
+
+                originalTrackList = [...trackList];
+                isShuffle = false;
+                shuffleBtn.classList.remove('active');
+                
+                buildPlaylist();
+                showPlayer();
+                playTrack(0);
+            }
+
+            function buildPlaylist() {
+                playlistElement.innerHTML = '';
+                trackList.forEach((track, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = track.name.replace('.mp3', '');
+                    li.dataset.index = index;
+                    playlistElement.appendChild(li);
+                });
+            }
+
+            function showPlayer() {
+                folderSelectPrompt.classList.add('hidden');
+                mainPlayer.classList.remove('hidden');
+                playlistContainer.classList.remove('hidden');
+            }
+
+            function playTrack(index) {
+                if (index < 0 || index >= trackList.length) return;
+
+                currentIndex = index;
+                const track = trackList[currentIndex];
+                const trackUrl = URL.createObjectURL(track);
+                audioPlayer.src = trackUrl;
+                audioPlayer.play();
+                
+                isPlaying = true;
+                updateUI();
+            }
+
+            function togglePlayPause() {
+                if (currentIndex === -1) {
+                    playTrack(0);
+                    return;
+                }
+                
+                if (isPlaying) {
+                    audioPlayer.pause();
+                } else {
+                    audioPlayer.play();
+                }
+                
+                isPlaying = !isPlaying;
+                updateUI();
+            }
+            
+            function playNextTrack() {
+                const nextIndex = (currentIndex + 1) % trackList.length;
+                playTrack(nextIndex);
+            }
+
+            function playPrevTrack() {
+                const prevIndex = (currentIndex - 1 + trackList.length) % trackList.length;
+                playTrack(prevIndex);
+            }
+            
+            function toggleShuffle() {
+                isShuffle = !isShuffle;
+                shuffleBtn.classList.toggle('active', isShuffle);
+
+                if (isShuffle) {
+                    // When turning shuffle on, shuffle the list but keep current track in same position
+                    const currentTrack = trackList[currentIndex];
+                    shuffleArray(trackList);
+                    // Find where the current track ended up after shuffle
+                    currentIndex = trackList.findIndex(track => track.name === currentTrack.name);
+                } else {
+                    // When turning shuffle off, revert to the original order
+                    const currentTrack = trackList[currentIndex];
+                    trackList = [...originalTrackList];
+                    // Find the original position of the current track
+                    currentIndex = trackList.findIndex(track => track.name === currentTrack.name);
+                }
+
+                // Rebuild the playlist UI to reflect the new order
+                buildPlaylist();
+                highlightCurrentTrack();
+            }
+            
+            // Fisher-Yates shuffle algorithm
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function updateUI() {
+                // Play/Pause button
+                playPauseBtn.textContent = isPlaying ? '❚❚' : '▶';
+
+                if (currentIndex !== -1) {
+                    // Now Playing text
+                    nowPlaying.textContent = trackList[currentIndex].name.replace('.mp3', '');
+                    // Highlight in playlist
+                    highlightCurrentTrack();
+                }
+            }
+
+            function highlightCurrentTrack() {
+                Array.from(playlistElement.children).forEach((li, index) => {
+                    li.classList.toggle('active', index === currentIndex);
+                });
+            }
+
+            function updateProgressBar() {
+                if (audioPlayer.duration) {
+                    const progressPercent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                    progressBar.style.width = `${progressPercent}%`;
+                }
+            }
+
+            function setProgress(e) {
+                const width = this.clientWidth;
+                const clickX = e.offsetX;
+                if (audioPlayer.duration) {
+                    audioPlayer.currentTime = (clickX / width) * audioPlayer.duration;
+                }
+            }
+        });
+    </script>
+
+</body>
+</html>
